@@ -7,6 +7,7 @@ var Curry = require("bs-platform/lib/js/curry.js");
 var Belt_Int = require("bs-platform/lib/js/belt_Int.js");
 var Belt_Array = require("bs-platform/lib/js/belt_Array.js");
 var Caml_array = require("bs-platform/lib/js/caml_array.js");
+var Belt_Option = require("bs-platform/lib/js/belt_Option.js");
 
 var getToday = (function() {
   let date = new Date();
@@ -29,15 +30,6 @@ function arrlen(arr) {
 
 function strlen(str) {
   return str.length;
-}
-
-function strToInt(str) {
-  var value = Belt_Int.fromString(str);
-  if (value !== undefined) {
-    return value;
-  } else {
-    return -1;
-  }
 }
 
 function fileRead(filename) {
@@ -71,19 +63,17 @@ function fileAppend(filename, todo) {
   
 }
 
-var args = Belt_Array.slice(process.argv, 2, process.argv.length);
-
 function help(param) {
   console.log(helpInfo);
   
 }
 
-function add(param) {
-  if (args.length === 1) {
-    console.log("Error: Missing todo string. Nothing added!");
+function add(todo) {
+  if (todo !== undefined) {
+    fileAppend(todoFile, todo);
+    console.log("Added todo: \"" + todo + "\"");
   } else {
-    fileAppend(todoFile, Caml_array.get(args, 1));
-    console.log("Added todo: \"" + Caml_array.get(args, 1) + "\"");
+    console.log("Error: Missing todo string. Nothing added!");
   }
   
 }
@@ -94,48 +84,48 @@ function ls(param) {
     console.log("There are no pending todos!");
     return ;
   } else {
-    return Belt_Array.forEachWithIndex(Belt_Array.reverse(todos), (function (i, todo) {
-                  console.log("[" + String(todos.length - i | 0) + "] " + todo);
+    return Belt_Array.forEach(Belt_Array.reduceWithIndex(Belt_Array.reverse(todos), [], (function (acc, todo, index) {
+                      return Belt_Array.concat(acc, ["[" + String(todos.length - index | 0) + "] " + todo]);
+                    })), (function (prim) {
+                  console.log(prim);
                   
                 }));
   }
 }
 
-function del(param) {
-  if (args.length === 1) {
-    console.log("Error: Missing NUMBER for deleting todo.");
+function del(pos) {
+  if (pos !== undefined) {
+    var todos = fileRead(todoFile);
+    var idx = todos.length - pos | 0;
+    if (todos.length <= idx || idx < 0) {
+      console.log("Error: todo #" + String(pos) + " does not exist. Nothing deleted.");
+    } else {
+      todos.splice(idx, 1);
+      fileWrite(todoFile, todos);
+      console.log("Deleted todo #" + String(pos));
+    }
     return ;
   }
-  var todos = fileRead(todoFile);
-  var pos = strToInt(Caml_array.get(args, 1));
-  var idx = todos.length - pos | 0;
-  if (todos.length <= idx || idx < 0) {
-    console.log("Error: todo #" + String(pos) + " does not exist. Nothing deleted.");
-  } else {
-    todos.splice(idx, 1);
-    fileWrite(todoFile, todos);
-    console.log("Deleted todo #" + String(pos));
-  }
+  console.log("Error: Missing NUMBER for deleting todo.");
   
 }
 
-function don(param) {
-  if (args.length === 1) {
-    console.log("Error: Missing NUMBER for marking todo as done.");
+function don(pos) {
+  if (pos !== undefined) {
+    var todos = fileRead(todoFile);
+    var idx = todos.length - pos | 0;
+    if (todos.length <= idx || idx < 0) {
+      console.log("Error: todo #" + String(pos) + " does not exist.");
+      return ;
+    }
+    var completed = todos.splice(idx, 1);
+    fileWrite(todoFile, todos);
+    var completedTodo = "x " + Curry._1(getToday, undefined) + " " + Caml_array.get(completed, 0);
+    fileAppend(doneFile, completedTodo);
+    console.log("Marked todo #" + String(pos) + " as done.");
     return ;
   }
-  var todos = fileRead(todoFile);
-  var pos = strToInt(Caml_array.get(args, 1));
-  var idx = todos.length - pos | 0;
-  if (todos.length <= idx || idx < 0) {
-    console.log("Error: todo #" + String(pos) + " does not exist.");
-    return ;
-  }
-  var completed = todos.splice(idx, 1);
-  fileWrite(todoFile, todos);
-  var completedTodo = "x " + Curry._1(getToday, undefined) + " " + Caml_array.get(completed, 0);
-  fileAppend(doneFile, completedTodo);
-  console.log("Marked todo #" + String(pos) + " as done.");
+  console.log("Error: Missing NUMBER for marking todo as done.");
   
 }
 
@@ -146,19 +136,20 @@ function rep(param) {
   
 }
 
-if (args.length === 0) {
-  console.log(helpInfo);
-} else {
-  var match = Caml_array.get(args, 0);
-  switch (match) {
+var command = Belt_Array.get(process.argv, 2);
+
+var arg = Belt_Array.get(process.argv, 3);
+
+if (command !== undefined) {
+  switch (command) {
     case "add" :
-        add(undefined);
+        add(arg);
         break;
     case "del" :
-        del(undefined);
+        del(Belt_Option.flatMap(arg, Belt_Int.fromString));
         break;
     case "done" :
-        don(undefined);
+        don(Belt_Option.flatMap(arg, Belt_Int.fromString));
         break;
     case "ls" :
         ls(undefined);
@@ -169,6 +160,8 @@ if (args.length === 0) {
     default:
       console.log(helpInfo);
   }
+} else {
+  console.log(helpInfo);
 }
 
 exports.getToday = getToday;
@@ -178,15 +171,15 @@ exports.doneFile = doneFile;
 exports.helpInfo = helpInfo;
 exports.arrlen = arrlen;
 exports.strlen = strlen;
-exports.strToInt = strToInt;
 exports.fileRead = fileRead;
 exports.fileWrite = fileWrite;
 exports.fileAppend = fileAppend;
-exports.args = args;
 exports.help = help;
 exports.add = add;
 exports.ls = ls;
 exports.del = del;
 exports.don = don;
 exports.rep = rep;
-/* args Not a pure module */
+exports.command = command;
+exports.arg = arg;
+/* command Not a pure module */

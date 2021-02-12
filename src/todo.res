@@ -41,7 +41,7 @@ date and file functions defined above. Remove it to begin your implementation.
 
 /* * Constant Values */
 @bs.val external __dirname: string = "__dirname"
-@bs.val external argv: array<string> = "process.argv"
+@bs.val @bs.scope("process") external argv: array<string> = "argv"
 
 let todoFile = "todo.txt"
 let doneFile = "done.txt"
@@ -58,13 +58,13 @@ $ ./todo report           # Statistics`
 let arrlen = arr => arr->Belt.Array.length
 let strlen = str => str->Js.String.length
 
-let strToInt = str => {
-  let value = Belt.Int.fromString(str)
-  switch value {
-  | None => -1
-  | Some(x) => x
-  }
-}
+// let strToInt = str => {
+//   let int = Belt.Int.fromString(str)
+//   switch int {
+//   | None => -1
+//   | Some(x) => x
+//   }
+// }
 
 let fileRead = filename => {
   if filename->existsSync {
@@ -86,18 +86,17 @@ let fileAppend = (filename, todo) => {
 }
 
 /* * Program Code */
-let args = argv->Belt.Array.slice(~offset=2, ~len=argv->arrlen)
-
 let help = () => {
   Js.log(helpInfo)
 }
 
-let add = () => {
-  if args->arrlen == 1 {
-    Js.log("Error: Missing todo string. Nothing added!")
-  } else {
-    todoFile->fileAppend(args[1])
-    Js.log(`Added todo: "${args[1]}"`)
+let add = todo => {
+  switch todo {
+  | None => Js.log("Error: Missing todo string. Nothing added!")
+  | Some(todo) => {
+      todoFile->fileAppend(todo)
+      Js.log(`Added todo: "${todo}"`)
+    }
   }
 }
 
@@ -108,44 +107,45 @@ let ls = () => {
   } else {
     todos
     ->Belt.Array.reverse
-    ->Belt.Array.forEachWithIndex((i, todo) =>
-      Js.log(`[${Belt.Int.toString(todos->arrlen - i)}] ${todo}`)
+    ->Belt.Array.reduceWithIndex([], (acc, todo, index) =>
+      acc->Belt.Array.concat([`[${(todos->arrlen - index)->Belt.Int.toString}] ${todo}`])
     )
+    ->Belt.Array.forEach(Js.log)
   }
 }
 
-let del = () => {
-  if args->arrlen == 1 {
-    Js.log("Error: Missing NUMBER for deleting todo.")
-  } else {
-    let todos = todoFile->fileRead
-    let pos = strToInt(args[1])
-    let idx = todos->arrlen - pos
-    if todos->arrlen <= idx || idx < 0 {
-      Js.log(`Error: todo #${Belt.Int.toString(pos)} does not exist. Nothing deleted.`)
-    } else {
-      let _ = todos->Js.Array.spliceInPlace(~pos=idx, ~remove=1, ~add=[])
-      todoFile->fileWrite(todos)
-      Js.log(`Deleted todo #${Belt.Int.toString(pos)}`)
+let del = pos => {
+  switch pos {
+  | None => Js.log("Error: Missing NUMBER for deleting todo.")
+  | Some(pos) => {
+      let todos = todoFile->fileRead
+      let idx = todos->arrlen - pos
+      if todos->arrlen <= idx || idx < 0 {
+        Js.log(`Error: todo #${Belt.Int.toString(pos)} does not exist. Nothing deleted.`)
+      } else {
+        let _ = todos->Js.Array.spliceInPlace(~pos=idx, ~remove=1, ~add=[])
+        todoFile->fileWrite(todos)
+        Js.log(`Deleted todo #${Belt.Int.toString(pos)}`)
+      }
     }
   }
 }
 
-let don = () => {
-  if args->arrlen == 1 {
-    Js.log("Error: Missing NUMBER for marking todo as done.")
-  } else {
-    let todos = todoFile->fileRead
-    let pos = strToInt(args[1])
-    let idx = todos->arrlen - pos
-    if todos->arrlen <= idx || idx < 0 {
-      Js.log(`Error: todo #${Belt.Int.toString(pos)} does not exist.`)
-    } else {
-      let completed = todos->Js.Array.spliceInPlace(~pos=idx, ~remove=1, ~add=[])
-      todoFile->fileWrite(todos)
-      let completedTodo = `x ${getToday()} ${completed[0]}`
-      doneFile->fileAppend(completedTodo)
-      Js.log(`Marked todo #${Belt.Int.toString(pos)} as done.`)
+let don = pos => {
+  switch pos {
+  | None => Js.log("Error: Missing NUMBER for marking todo as done.")
+  | Some(pos) => {
+      let todos = todoFile->fileRead
+      let idx = todos->arrlen - pos
+      if todos->arrlen <= idx || idx < 0 {
+        Js.log(`Error: todo #${Belt.Int.toString(pos)} does not exist.`)
+      } else {
+        let completed = todos->Js.Array.spliceInPlace(~pos=idx, ~remove=1, ~add=[])
+        todoFile->fileWrite(todos)
+        let completedTodo = `x ${getToday()} ${completed[0]}`
+        doneFile->fileAppend(completedTodo)
+        Js.log(`Marked todo #${Belt.Int.toString(pos)} as done.`)
+      }
     }
   }
 }
@@ -161,15 +161,14 @@ let rep = () => {
   )
 }
 
-if args->arrlen == 0 {
-  help()
-} else {
-  switch args[0] {
-  | "add" => add()
-  | "ls" => ls()
-  | "del" => del()
-  | "done" => don()
-  | "report" => rep()
-  | _ => help()
-  }
+let command: option<string> = argv->Belt.Array.get(2)
+let arg: option<string> = argv->Belt.Array.get(3)
+switch command {
+| None => help()
+| Some("add") => add(arg)
+| Some("ls") => ls()
+| Some("del") => arg->Belt.Option.flatMap(Belt.Int.fromString)->del()
+| Some("done") => arg->Belt.Option.flatMap(Belt.Int.fromString)->don()
+| Some("report") => rep()
+| _ => help()
 }
