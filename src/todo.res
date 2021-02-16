@@ -167,8 +167,8 @@ switch command {
 | None => help()
 | Some("add") => add(arg)
 | Some("ls") => ls()
-| Some("del") => arg->Belt.Option.flatMap(Belt.Int.fromString)->del()
-| Some("done") => arg->Belt.Option.flatMap(Belt.Int.fromString)->don()
+| Some("del") => arg->Belt.Option.flatMap(Belt.Int.fromString)->del
+| Some("done") => arg->Belt.Option.flatMap(Belt.Int.fromString)->don
 | Some("report") => rep()
 | _ => help()
 }
